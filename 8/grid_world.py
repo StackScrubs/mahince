@@ -5,19 +5,21 @@ from grid_world_state import GridWorldEnvState
 
 DANGER_SQUARE = 1
 GOAL_SQUARE = 2
+INTENT_SQUARE = 3
 
 class GridWorldEnv:
-    def __init__(self, render_mode: Optional[str] = None):
-        self.grid_world_size = 20
+    def __init__(self, grid_world_size=20, danger_zones=10, render_mode: Optional[str] = None):
+        self.grid_world_size = grid_world_size
         self.grid = np.zeros((self.grid_world_size,) * 2, dtype=int)
-        self.action_space = ['up', 'down', 'left', 'right']
-        self.action_space_n = len(self.action_space) # up, down, left, right
-        self.state_space_n = 3 # clear square, dangerous square, win square
-        self.state = None
-        self.damage_threshold = 5
-        
-        self._generate_world()
 
+        self.action_space = {'up': 0, 'down': 1, 'left': 2, 'right' : 3}
+        self.action_space_n = len(self.action_space) # up, down, left, right
+
+        self.state_space_n = self.grid_world_size
+        self.state = None
+
+        self.damage_threshold = 5
+        self._generate_world(danger_zones=danger_zones)
         self.stepped_beyond_terminated = None
 
         self.render_mode = render_mode
@@ -26,13 +28,13 @@ class GridWorldEnv:
         self.screen_size = 800
         self.screen = None
         self.clock = None
-        self.render_fps = 20
+        self.render_fps = 60
 
-    def sample_action_space(self) -> str:
-        return random.choice(self.action_space)
+    def sample_action_space(self) -> int:
+        return random.choice(list(self.action_space.values()))
 
-    def step(self, action: str):
-        assert action in self.action_space, 'Invalid action'
+    def step(self, action: int):
+        assert action in list(self.action_space.values()), 'Invalid action'
         assert self.state is not None, 'Call reset before using step method'
 
         self._move_self(action)
@@ -40,21 +42,18 @@ class GridWorldEnv:
         won = False
         if (self.grid[self.state.pos.x, self.state.pos.y] == DANGER_SQUARE):
             # ouch
+            print('ouch!')
             self.state.damage += 1
-            reward = -10
+            reward = -100
         elif (self.grid[self.state.pos.x, self.state.pos.y] == GOAL_SQUARE):
             # homie just won
-            reward = 100
+            print('*****WINNER WINNER CHECKEN DINNER!*******')
+            reward = 500
             won = True
         else:
-            reward = -1
+            reward = -5
 
         terminated = bool(
-            # self.state.pos.x < 0
-            # or self.state.pos.x >= self.grid_world_size
-            # or self.state.pos.y < 0
-            # or self.state.pos.y >= self.grid_world_size 
-            # ^ kan aldri være sant foreløpig, tillate?
             self.state.damage >= self.damage_threshold
             or won
         )
@@ -71,7 +70,7 @@ class GridWorldEnv:
         if self.render_mode == 'human':
             self._render()
 
-        return (reward, terminated)
+        return (self.state, reward, terminated)
 
     def reset(self):
         self.state = GridWorldEnvState()
@@ -85,24 +84,23 @@ class GridWorldEnv:
             pygame.display.quit()
             pygame.quit()
 
-    def _move_self(self, action):
-        # omvendt x og y????? :p
-        if (action == 'up'):
+    def _move_self(self, action: int):
+        if (action == self.action_space['up']):
             if (self.state.pos.y > 0):
                 self.state.pos.y -= 1
-        if (action == 'down'):
+        if (action == self.action_space['down']):
             if (self.state.pos.y < self.grid_world_size - 1):
                 self.state.pos.y += 1
-        if (action == 'left'):
+        if (action == self.action_space['left']):
             if (self.state.pos.x > 0):
                 self.state.pos.x -= 1
-        if (action == 'right'):
+        if (action == self.action_space['right']):
             if (self.state.pos.x < self.grid_world_size - 1):
                 self.state.pos.x += 1
 
     def _render(self):
         assert self.render_mode is not None, 'Render mode must be set to "human" to render'
-        assert self.state is not None, "Do not directly call this method; use step() instead" 
+        assert self.state is not None, 'Do not directly call this method; use step() instead' 
 
         import pygame
         if self.screen is None:
@@ -126,6 +124,16 @@ class GridWorldEnv:
                 square_color, is_bordered = self._get_square_display(x, y)
                 
                 pygame.draw.rect(surf, square_color, rect, is_bordered)
+                
+                # pygame.draw.polygon(surf, (0, 0, 0), (
+                #     (square_sz / 4 + x, square_sz / 4 + y), 
+                #     (square_sz / 4 * 3 + x, square_sz / 4 * 3 + y), 
+                #     (200, 200), 
+                #     (200, 300), 
+                #     (300, 150), 
+                #     (200, 0), 
+                #     (200, 100)
+                # ))
 
         self.screen.blit(surf, (0, 0))
         
@@ -140,17 +148,29 @@ class GridWorldEnv:
             return ((255, 0, 64), False)
         elif self.grid[x,y] == GOAL_SQUARE:
             return ((64, 255, 0), False)
+        elif self.grid[x,y] == INTENT_SQUARE:
+            return ((240, 230, 140), False)
         else:
             return ((55,) * 3, True)
+        
+    # def _get_arrow_display(self, action: int):
+    #     if (action == self.action_space['up']):
+    #         return 
+    #     if (action == self.action_space['down']):
 
-    def _generate_world(self):
+    #     if (action == self.action_space['left']):
+
+    #     if (action == self.action_space['right']):
+
+    #     pygame.draw.polygon(window, (0, 0, 0), ((0, 100), (0, 200), (200, 200), (200, 300), (300, 150), (200, 0), (200, 100)))
+
+    def _generate_world(self, danger_zones=20):
         # Randomly generate goal in bottom right quarter of map
         r_x, r_y = self._generate_random_point(self.grid_world_size / 2)
         self.grid[r_x, r_y] = GOAL_SQUARE
 
         # Randomly generate dangerous zones
-        DANGER_ZONES = 20
-        for _ in range(DANGER_ZONES):
+        for _ in range(danger_zones):
             r_x, r_y = 0, 0
             is_start_pos = lambda x, y: x == 0 and y == 0
             while (is_start_pos(r_x, r_y) or self.grid[r_x, r_y] == 1 or self.grid[r_x, r_y] == 2):
