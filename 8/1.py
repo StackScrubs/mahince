@@ -1,41 +1,83 @@
-from base64 import encode
-from typing import Tuple
-from sklearn.preproccessing import KBinsDiscretizer
-import gym
+from sklearn.preprocessing import KBinsDiscretizer
 import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
-env = gym.make("CartPole-v1", render_mode="human")
-prev_states, info = env.reset(seed=42)
-STATE_SPACE_N = env.observation_space
+import gym
+
+env = gym.make("CartPole-v1")
+
+OBSERVATION_SPACE_N = env.observation_space.shape[0]
 ACTION_SPACE_N = env.action_space.n
+DISCRETIZE_N = 64
+MAX_REWARD = 500
 
-q_table = np.zeros((STATE_SPACE_N, ACTION_SPACE_N))
+n_bins = (DISCRETIZE_N, ) * OBSERVATION_SPACE_N
 
-ALPHA = 0.9 # <0,1>
-GAMMA = 0.89 # <0,1>
 
-lower_bounds = [ env.observation_space.low[2], -math.radians(50) ]
-upper_bounds = [ env.observation_space.high[2], math.radians(50) ]
-
-def cont_to_disc(pos, vel, ang, ang_vel) -> Tuple[int,...]:
+def discretize(observations):
+    """Convert continous state intro a discrete state"""
     est = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy='uniform')
-    est.fit([lower_bounds, upper_bounds ])
-    return tuple(map(int, est.transform([[pos, vel, ang, ang_vel]])[0]))
+    X = [
+        env.observation_space.low,
+        env.observation_space.high,
+    ]
+
+    est.fit(X)
+    T = est.transform([observations])[0]
+
+    state = 0
+    mult = 1
+    for i in T:
+        state += int(i) * mult
+        mult *= DISCRETIZE_N
+
+    return state
 
 
-for _ in range(5): 
-    action = env.action_space.sample()
-    states, reward, terminated, truncated, info = env.step(action)
-    
-    if terminated or truncated: 
-        prev_states, info = env.reset() 
-        
-    for state_idx in range(STATE_SPACE_N): 
-        prev = q_table[state_idx, action] 
-        q_table[state_idx, action] = prev + ALPHA*(reward + GAMMA*np.max(q_table[state_idx]) - prev) 
-        #q_table[:, action] = q_table[:, action] + ALPHA*(reward + GAMMA*np.argmax(np.max(q_table, axis=0)) - q_table[:, action]) 
+Q_table = np.zeros((DISCRETIZE_N**OBSERVATION_SPACE_N, ACTION_SPACE_N))
 
-# prev_states = statesenv.close()
-# q_table[obs, action] = q_table[obs, action] + (
-#     ALPHA * (reward + GAMMA * np.max(q_table[obs, :]) - q_table[obs, action])
-# )
+ALPHA = 0.1  # [0,1]
+GAMMA = 0.4  # [0,1]
+
+EPISODES = 100_000
+scores = np.zeros(EPISODES)
+for e in tqdm(range(EPISODES)):
+    # Discretize state into buckets
+    obs = env.reset()[0]
+    state = discretize(obs)
+
+    # epsilon greedy strategy
+    epsilon = max(.01, min(1., 1. - np.log10((e + 1) / 25)))
+    terminated = False
+    truncated = False
+    reward = 0
+
+    while not terminated and not truncated:
+        # policy action
+        action = np.argmax(Q_table[state])
+
+        # insert random action
+        if np.random.random() < epsilon:
+            action = env.action_space.sample()  # explore
+
+        # increment enviroment
+        obs, _, terminated, truncated, _ = env.step(action)
+        new_state = discretize(obs)
+
+        # Update Q-Table
+        Q_table[state, action] += ALPHA*(
+            reward +
+            GAMMA*np.max(Q_table[new_state, :]) -
+            Q_table[state, action]
+        )
+
+        state = new_state
+        reward += 1
+
+    scores[e] = reward
+
+print(scores)
+
+plt.plot(scores / MAX_REWARD,  c='blue', label='epochs')
+plt.savefig("plot.png")
