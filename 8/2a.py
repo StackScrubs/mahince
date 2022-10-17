@@ -13,7 +13,7 @@ ALPHA = 0.1  # range [0,1]
 GAMMA = 0.4  # range [0,1]
 
 def get_state_index(state):
-    return state.pos.x * STATE_SPACE_N + state.pos.y    
+    return state.pos.x * STATE_SPACE_N + state.pos.y
 
 EPISODES = 100_000
 for e in range(EPISODES):
@@ -33,17 +33,8 @@ for e in range(EPISODES):
         else:
             # policy action
             action = np.argmax(Q_table[state])
-            
-            if action == 1:
-                env.grid[env.state.pos.x, env.state.pos.y - 1] = INTENT_SQUARE
-            elif action == 2:
-                env.grid[env.state.pos.x, env.state.pos.y + 1] = INTENT_SQUARE
-            elif action == 3:
-                env.grid[env.state.pos.x - 1, env.state.pos.y] = INTENT_SQUARE
-            elif action == 4:
-                env.grid[env.state.pos.x + 1, env.state.pos.y] = INTENT_SQUARE
 
-        new_state, new_reward, terminated = env.step(action)
+        new_state, new_reward, terminated = env.step(action, np.argmax(Q_table, axis=1))
         reward += new_reward
         new_state = get_state_index(new_state)
 

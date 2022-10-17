@@ -28,12 +28,14 @@ class GridWorldEnv:
         self.screen_size = 800
         self.screen = None
         self.clock = None
-        self.render_fps = 60
+        self.render_fps = 120
+        self.arrow_image = None
+        self.dot_image = None
 
     def sample_action_space(self) -> int:
         return random.choice(list(self.action_space.values()))
 
-    def step(self, action: int):
+    def step(self, action: int, action_states):
         assert action in list(self.action_space.values()), 'Invalid action'
         assert self.state is not None, 'Call reset before using step method'
 
@@ -42,12 +44,10 @@ class GridWorldEnv:
         won = False
         if (self.grid[self.state.pos.x, self.state.pos.y] == DANGER_SQUARE):
             # ouch
-            print('ouch!')
             self.state.damage += 1
             reward = -100
         elif (self.grid[self.state.pos.x, self.state.pos.y] == GOAL_SQUARE):
             # homie just won
-            print('*****WINNER WINNER CHECKEN DINNER!*******')
             reward = 500
             won = True
         else:
@@ -68,19 +68,18 @@ class GridWorldEnv:
             self.stepped_beyond_terminated = True
         
         if self.render_mode == 'human':
-            self._render()
+            self._render(action_states)
 
         return (self.state, reward, terminated)
 
     def reset(self):
         self.state = GridWorldEnvState()
         self.stepped_beyond_terminated = None
-        print('reset')
 
     def close(self):
         if self.screen is not None:
             import pygame
-
+            
             pygame.display.quit()
             pygame.quit()
 
@@ -98,11 +97,12 @@ class GridWorldEnv:
             if (self.state.pos.x < self.grid_world_size - 1):
                 self.state.pos.x += 1
 
-    def _render(self):
+    def _render(self, action_states):
+        import pygame
+        
         assert self.render_mode is not None, 'Render mode must be set to "human" to render'
         assert self.state is not None, 'Do not directly call this method; use step() instead' 
 
-        import pygame
         if self.screen is None:
             pygame.init()
             self.screen = pygame.display.set_mode((self.screen_size,) * 2)
@@ -110,30 +110,27 @@ class GridWorldEnv:
         if self.clock is None:
             self.clock = pygame.time.Clock()
         
+        square_sz = self.screen_size / self.grid_world_size
+
+        if self.arrow_image is None:
+            self.arrow_image = pygame.transform.scale(pygame.image.load("./arrow-image.png"), (square_sz / 2, ) * 2).convert_alpha()
+        if self.dot_image is None:
+            self.dot_image = pygame.transform.scale(pygame.image.load("./dot-image.png"), (square_sz / 2, ) * 2).convert_alpha()
+
         surf = pygame.Surface((self.screen_size,) * 2)
         BG_COLOR = 205
 
         surf.fill((BG_COLOR,) * 3)
-        square_sz = self.screen_size / self.grid_world_size
         l, t = 0, 0
         for x in range(self.grid_world_size):
             for y in range(self.grid_world_size):
-                l = square_sz * y
-                t = square_sz * x
-                rect = (l, t, square_sz, square_sz)
+                l = square_sz * x
+                t = square_sz * y
                 square_color, is_bordered = self._get_square_display(x, y)
-                
+                rect = pygame.Rect(l, t, square_sz, square_sz)
+                surfImage = self._get_arrow_display(action_states[x*self.state_space_n+y])
                 pygame.draw.rect(surf, square_color, rect, is_bordered)
-                
-                # pygame.draw.polygon(surf, (0, 0, 0), (
-                #     (square_sz / 4 + x, square_sz / 4 + y), 
-                #     (square_sz / 4 * 3 + x, square_sz / 4 * 3 + y), 
-                #     (200, 200), 
-                #     (200, 300), 
-                #     (300, 150), 
-                #     (200, 0), 
-                #     (200, 100)
-                # ))
+                surf.blit(surfImage, rect)
 
         self.screen.blit(surf, (0, 0))
         
@@ -153,16 +150,16 @@ class GridWorldEnv:
         else:
             return ((55,) * 3, True)
         
-    # def _get_arrow_display(self, action: int):
-    #     if (action == self.action_space['up']):
-    #         return 
-    #     if (action == self.action_space['down']):
-
-    #     if (action == self.action_space['left']):
-
-    #     if (action == self.action_space['right']):
-
-    #     pygame.draw.polygon(window, (0, 0, 0), ((0, 100), (0, 200), (200, 200), (200, 300), (300, 150), (200, 0), (200, 100)))
+    def _get_arrow_display(self, action: int):
+        import pygame 
+        if (action == self.action_space['up']):
+            return pygame.transform.rotate(self.arrow_image, 90)
+        if (action == self.action_space['down']):
+            return pygame.transform.rotate(self.arrow_image, -90)
+        if (action == self.action_space['left']):
+            return pygame.transform.flip(self.arrow_image, True, False)
+        if (action == self.action_space['right']):
+            return self.arrow_image
 
     def _generate_world(self, danger_zones=20):
         # Randomly generate goal in bottom right quarter of map
