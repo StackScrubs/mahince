@@ -46,11 +46,13 @@ class BinaryBioAi:
         n_mates = (100 + random.randint(-50, 50)) - len(new_population)
         for _ in range(n_mates):
             parent1 = elites[random.randint(0, len(elites) - 1)]
-            parent2 = parent1
+            parent2 = None
 
-            # Prevent inbreeding by mutating parent2
+            # Prevent inbreeding by making sure parent1 != parent2 OR mutating parent2 after 100 atemmpts
             for _ in range(MAX_FAILED_MATES):
                 parent2 = self.population[random.randint(0, len(self.population) - 1)]
+                if parent2 != parent1:
+                    break
             else:
                 parent2 = parent2.mutate()
 

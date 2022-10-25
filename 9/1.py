@@ -52,7 +52,7 @@ def run_single(num: int):
     run_epochs(1, ModelParameters(int(sys.argv[1]), 0.05, 10), True)
 
 def run_all():
-    EPOCHS = 1000
+    EPOCHS = 10
     N = 1
     P = 10
     avg_epoch_times = []
@@ -65,7 +65,7 @@ def run_all():
         run_time = sum(time_measurements)
         avg_epoch_time = run_time / EPOCHS
         avg_epoch_times.append(avg_epoch_time)
-        print(f'UNIVERSE TERMINATED!\nBIT-WIDTH: {i}\nRun-time: {run_time:.2f}\nAvg. Epoch Time: {avg_epoch_time:.2f}s/epoch\nAvg. Generations {avg_generations:.2f}\nAvg. Pop. Size: {avg_pop_size:.2f}')
+        print(f'UNIVERSE TERMINATED!\nBIT-WIDTH: {i}\nRun-time: {run_time:.2f}\nAvg. Epoch Time: {avg_epoch_time:.5f}s/epoch\nAvg. Generations {avg_generations:.2f}\nAvg. Pop. Size: {avg_pop_size:.2f}')
         
         x = [i for i in range(EPOCHS)]
         y = time_measurements
